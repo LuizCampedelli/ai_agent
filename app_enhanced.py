@@ -1,8 +1,210 @@
 import streamlit as st
 import json
 import datetime
-from enhanced_agent import EnhancedDentalAgent
-from dental_knowledge import DentalKnowledgeBase
+import requests
+
+# Dental Knowledge Base Class
+class DentalKnowledgeBase:
+    def __init__(self):
+        self.symptoms_categories = {
+            "dor": {
+                "questions": [
+                    "Onde exatamente você sente a dor?",
+                    "A dor é constante ou vem e vai?",
+                    "Qual a intensidade da dor (escala de 1 a 10)?",
+                    "A dor piora com algo específico?",
+                    "Há quanto tempo sente esta dor?"
+                ],
+                "keywords": ["dor", "dói", "dolorido", "latejando", "ardendo"]
+            },
+            "sangramento": {
+                "questions": [
+                    "O sangramento ocorre durante a escovação ou espontaneamente?",
+                    "Há quanto tempo nota o sangramento?",
+                    "O sangramento é abundante ou apenas manchas na escova?",
+                    "A gengiva está inchada ou dolorida?"
+                ],
+                "keywords": ["sangramento", "sangra", "sangue", "hemorragia"]
+            },
+            "inchaço": {
+                "questions": [
+                    "Onde está localizado o inchaço?",
+                    "Há quanto tempo notou o inchaço?",
+                    "O inchaço está aumentando?",
+                    "Há dor associada ao inchaço?",
+                    "Há febre ou mal-estar?"
+                ],
+                "keywords": ["inchaço", "inchado", "inchar", "caroço"]
+            },
+            "sensibilidade": {
+                "questions": [
+                    "A sensibilidade é ao frio, ao quente ou a doces?",
+                    "Quais dentes são sensíveis?",
+                    "Há quanto tempo tem sensibilidade?",
+                    "A sensibilidade piora com a escovação?"
+                ],
+                "keywords": ["sensibilidade", "sensível", "dói frio", "dói quente"]
+            },
+            "mau_hálito": {
+                "questions": [
+                    "Há quanto tempo nota o mau hálito?",
+                    "Alguém próximo comentou sobre isso?",
+                    "O mau hálito persiste mesmo após escovar os dentes?",
+                    "Tem saburra lingual (placa na língua)?"
+                ],
+                "keywords": ["mau hálito", "bafo", "halitose"]
+            }
+        }
+
+        self.medical_conditions = {
+            "sistêmicas": [
+                "diabetes", "hipertensão", "cardiopatias", "problemas_renais",
+                "hepatite", "hiv", "cancer", "osteoporose", "asma", "artrite"
+            ],
+            "alergias": [
+                "penicilina", "anestésicos", "anti-inflamatórios", "latex",
+                "antibióticos", "analgésicos"
+            ],
+            "medicamentos": [
+                "anticoagulantes", "corticoides", "bifosfonatos", "imunossupressores",
+                "antidepressivos", "anti-hipertensivos"
+            ],
+            "hábitos": [
+                "tabagismo", "etilismo", "bruxismo", "onicofagia", "respiração bucal"
+            ]
+        }
+
+    def detect_symptoms(self, text):
+        """Detecta sintomas mencionados no texto"""
+        symptoms_found = []
+        text_lower = text.lower()
+
+        for symptom, data in self.symptoms_categories.items():
+            if any(keyword in text_lower for keyword in data["keywords"]):
+                symptoms_found.append(symptom)
+
+        return symptoms_found
+
+    def get_next_question(self, symptom, conversation_history):
+        """Retorna a próxima pergunta baseada no sintoma e histórico"""
+        if symptom not in self.symptoms_categories:
+            return None
+
+        questions = self.symptoms_categories[symptom]["questions"]
+
+        # Verifica quais perguntas já foram respondidas
+        answered_questions = []
+        for msg in conversation_history:
+            if msg["role"] == "assistant" and any(q in msg["content"] for q in questions):
+                # Encontra qual pergunta foi feita
+                for q in questions:
+                    if q in msg["content"]:
+                        answered_questions.append(q)
+                        break
+
+        # Retorna a primeira pergunta não respondida
+        for question in questions:
+            if question not in answered_questions:
+                return question
+
+        return None
+
+    def assess_urgency(self, symptoms, responses):
+        """Avalia urgência baseada nos sintomas e respostas"""
+        urgent_conditions = {
+            "inchaço_facial_severo": "URGENTE: Inchaço facial severo pode indicar infecção grave",
+            "dificuldade_respirar": "EMERGÊNCIA: Dificuldade respiratória associada a inchaço facial",
+            "sangramento_incontrolavel": "URGENTE: Sangramento incontrolável",
+            "trauma_facial": "URGENTE: Trauma facial com dor intensa",
+            "febre_alta_dor": "URGENTE: Febre alta associada a dor dental"
+        }
+
+        # Análise básica de urgência
+        if "inchaço" in symptoms and any("aumentando" in str(r).lower() for r in responses):
+            return urgent_conditions["inchaço_facial_severo"]
+
+        return "Pode agendar consulta regular. Consulte um dentista para avaliação completa."
+
+# Enhanced Dental Agent Class
+class EnhancedDentalAgent:
+    def __init__(self):
+        self.knowledge_base = DentalKnowledgeBase()
+        self.conversation_context = {
+            "symptoms_detected": [],
+            "current_focus": None,
+            "questions_asked": []
+        }
+
+    def call_llm_api(self, prompt, max_tokens=150):
+        """
+        Integra com APIs de LLM gratuitas
+        Por enquanto usa fallback, mas pode ser conectado a APIs reais
+        """
+        try:
+            # Tentativa de usar API (substitua com sua API real)
+            # return self._call_huggingface_api(prompt, max_tokens)
+            return self._rule_based_fallback(prompt)
+        except:
+            return self._rule_based_fallback(prompt)
+
+    def _rule_based_fallback(self, prompt):
+        """Fallback inteligente baseado no conhecimento odontológico"""
+        prompt_lower = prompt.lower()
+
+        # Análise baseada no conhecimento
+        symptoms = self.knowledge_base.detect_symptoms(prompt)
+
+        if symptoms:
+            symptom = symptoms[0]
+            next_question = self.knowledge_base.get_next_question(symptom, [])
+
+            if next_question:
+                return next_question
+            else:
+                urgency = self.knowledge_base.assess_urgency(symptoms, [prompt])
+                return f"Obrigado pelas informações. {urgency}"
+
+        # Respostas gerais baseadas no contexto
+        if any(word in prompt_lower for word in ["obrigado", "agradeço"]):
+            urgency = self.knowledge_base.assess_urgency(
+                self.conversation_context["symptoms_detected"],
+                [prompt]
+            )
+            return f"De nada! {urgency}"
+
+        elif any(word in prompt_lower for word in ["histórico", "doença", "medicamento"]):
+            return "É importante saber seu histórico médico. Você tem alguma condição de saúde, toma medicamentos regularmente ou tem alergias?"
+
+        elif any(word in prompt_lower for word in ["oi", "olá", "hello", "hi"]):
+            return "Olá! Sou seu assistente virtual para anamnese odontológica. Por favor, descreva o que está sentindo."
+
+        return "Obrigado por compartilhar. Pode me contar mais detalhes sobre seus sintomas odontológicos?"
+
+    def generate_response(self, user_input, conversation_history):
+        """Gera resposta usando conhecimento odontológico"""
+        # Atualiza contexto com sintomas detectados
+        symptoms = self.knowledge_base.detect_symptoms(user_input)
+        if symptoms:
+            for symptom in symptoms:
+                if symptom not in self.conversation_context["symptoms_detected"]:
+                    self.conversation_context["symptoms_detected"].append(symptom)
+
+        # Para cada sintoma detectado, tenta fazer perguntas específicas
+        for symptom in self.conversation_context["symptoms_detected"]:
+            next_question = self.knowledge_base.get_next_question(symptom, conversation_history)
+            if next_question:
+                return next_question
+
+        # Se não há perguntas específicas, usa fallback
+        return self._rule_based_fallback(user_input)
+
+    def reset_conversation(self):
+        """Reseta o contexto da conversação"""
+        self.conversation_context = {
+            "symptoms_detected": [],
+            "current_focus": None,
+            "questions_asked": []
+        }
 
 # Initialize session state
 if 'conversation' not in st.session_state:
@@ -17,8 +219,6 @@ if 'patient_data' not in st.session_state:
     }
 if 'dental_agent' not in st.session_state:
     st.session_state.dental_agent = EnhancedDentalAgent()
-if 'knowledge_base' not in st.session_state:
-    st.session_state.knowledge_base = DentalKnowledgeBase()
 
 # Streamlit app layout
 def main():
@@ -249,7 +449,7 @@ def export_to_json():
         "medical_anamnesis": {
             "symptoms_detected": st.session_state.dental_agent.conversation_context["symptoms_detected"],
             "conversation_summary": f"Anamnese com {len(st.session_state.conversation)} mensagens",
-            "urgency_assessment": st.session_state.knowledge_base.assess_urgency(
+            "urgency_assessment": st.session_state.dental_agent.knowledge_base.assess_urgency(
                 st.session_state.dental_agent.conversation_context["symptoms_detected"],
                 [msg['content'] for msg in st.session_state.conversation if msg['role'] == 'user']
             )
